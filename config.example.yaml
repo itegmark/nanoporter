@@ -1,0 +1,65 @@
+# nanoporter - Kubernetes Port-Forward Manager
+# Example Configuration File
+
+# Global settings
+check_interval: 10s  # How often to check port-forward health
+reconnect_delay: 5s  # Delay before attempting reconnect after failure
+
+# Kubernetes clusters configuration
+clusters:
+  # Example production cluster
+  - name: production
+    kubeconfig: /home/user/.kube/config
+    context: production-context  # Optional: specify which context to use
+    
+    forwards:
+      # Port-forward to a service
+      - namespace: default
+        service: api-gateway
+        type: service
+        local_port: 8080
+        remote_port: 80
+      
+      # Port-forward to a specific pod
+      - namespace: databases
+        service: postgres-primary-0
+        type: pod
+        local_port: 5432
+        remote_port: 5432
+      
+      # Another service example
+      - namespace: cache
+        service: redis-master
+        type: service
+        local_port: 6379
+        remote_port: 6379
+
+  # Example staging cluster
+  - name: staging
+    kubeconfig: /home/user/.kube/staging-config
+    # If context is not specified, uses current-context from kubeconfig
+    
+    forwards:
+      - namespace: web
+        service: frontend
+        type: service
+        local_port: 3000
+        remote_port: 3000
+      
+      - namespace: web
+        service: backend
+        type: service
+        local_port: 4000
+        remote_port: 8080
+
+  # Example development cluster (local minikube/kind)
+  - name: local
+    kubeconfig: /home/user/.kube/config
+    context: minikube
+    
+    forwards:
+      - namespace: default
+        service: dev-app
+        type: service
+        local_port: 8000
+        remote_port: 8000
