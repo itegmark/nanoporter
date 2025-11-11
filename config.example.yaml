@@ -90,6 +90,17 @@ clusters:
           secret_name: legacy-db-secret
           field_mapping:
             connection_string: database_url  # Will be parsed to extract user, pass, db
+      
+      # Database using direct credentials (no Kubernetes secret needed)
+      - namespace: databases
+        service: dev-db-pooler
+        type: service
+        local_port: 5435
+        remote_port: 5432
+        db_backup:
+          database: myapp_dev
+          username: devuser
+          password: devpass123
 
   # Example development cluster (local minikube/kind)
   - name: local

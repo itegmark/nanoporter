@@ -58,8 +58,27 @@ type DBCredentials struct {
 	ConnectionString string
 }
 
-// GetDatabaseCredentials retrieves database credentials from a K8s secret
-func (m *BackupManager) GetDatabaseCredentials(clusterName, namespace, secretName string, fieldMapping map[string]string) (*DBCredentials, error) {
+// GetDatabaseCredentials retrieves database credentials from config or K8s secret
+func (m *BackupManager) GetDatabaseCredentials(clusterName, namespace string, backupConfig *DBBackupConfig) (*DBCredentials, error) {
+	creds := &DBCredentials{}
+
+	// Check if direct credentials are provided in config
+	if backupConfig.Database != "" && backupConfig.Username != "" && backupConfig.Password != "" {
+		slog.Info("Using direct credentials from config",
+			"database", backupConfig.Database,
+			"username", backupConfig.Username,
+		)
+		creds.Database = backupConfig.Database
+		creds.Username = backupConfig.Username
+		creds.Password = backupConfig.Password
+		return creds, nil
+	}
+
+	// Otherwise, fetch from Kubernetes secret
+	if backupConfig.SecretName == "" {
+		return nil, fmt.Errorf("no credentials provided: either specify database/username/password or secret_name")
+	}
+
 	clientset, ok := m.clientsets[clusterName]
 	if !ok {
 		return nil, fmt.Errorf("clientset not found for cluster: %s", clusterName)
@@ -68,33 +87,31 @@ func (m *BackupManager) GetDatabaseCredentials(clusterName, namespace, secretNam
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	secret, err := clientset.CoreV1().Secrets(namespace).Get(ctx, secretName, metav1.GetOptions{})
+	secret, err := clientset.CoreV1().Secrets(namespace).Get(ctx, backupConfig.SecretName, metav1.GetOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to get secret %s/%s: %w", namespace, secretName, err)
+		return nil, fmt.Errorf("failed to get secret %s/%s: %w", namespace, backupConfig.SecretName, err)
 	}
 
-	creds := &DBCredentials{}
-
 	// Extract fields using the mapping
-	if key, ok := fieldMapping["database"]; ok {
+	if key, ok := backupConfig.FieldMapping["database"]; ok {
 		if val, exists := secret.Data[key]; exists {
 			creds.Database = string(val)
 		}
 	}
 
-	if key, ok := fieldMapping["username"]; ok {
+	if key, ok := backupConfig.FieldMapping["username"]; ok {
 		if val, exists := secret.Data[key]; exists {
 			creds.Username = string(val)
 		}
 	}
 
-	if key, ok := fieldMapping["password"]; ok {
+	if key, ok := backupConfig.FieldMapping["password"]; ok {
 		if val, exists := secret.Data[key]; exists {
 			creds.Password = string(val)
 		}
 	}
 
-	if key, ok := fieldMapping["connection_string"]; ok {
+	if key, ok := backupConfig.FieldMapping["connection_string"]; ok {
 		if val, exists := secret.Data[key]; exists {
 			creds.ConnectionString = string(val)
 		}
@@ -400,12 +417,11 @@ func (m *BackupManager) BackupAllDatabases(manager *PortForwardManager) error {
 			// Mark backup as running
 			pf.setBackupState(BackupRunning)
 
-			// Get database credentials from secret
+			// Get database credentials
 			creds, err := m.GetDatabaseCredentials(
 				cluster.Name,
 				forward.Namespace,
-				forward.DBBackup.SecretName,
-				forward.DBBackup.FieldMapping,
+				forward.DBBackup,
 			)
 			if err != nil {
 				slog.Error("Failed to get database credentials", "error", err)

@@ -35,8 +35,14 @@ type ForwardConfig struct {
 
 // DBBackupConfig contains database backup configuration
 type DBBackupConfig struct {
-	SecretName   string            `yaml:"secret_name"`
-	FieldMapping map[string]string `yaml:"field_mapping"` // maps config field names to secret keys
+	// Kubernetes secret-based credentials (preferred for production)
+	SecretName   string            `yaml:"secret_name,omitempty"`
+	FieldMapping map[string]string `yaml:"field_mapping,omitempty"` // maps config field names to secret keys
+
+	// Direct credentials (useful for development or when secrets aren't available)
+	Database string `yaml:"database,omitempty"`
+	Username string `yaml:"username,omitempty"`
+	Password string `yaml:"password,omitempty"`
 }
 
 // LoadConfig loads and validates the configuration from a YAML file
