@@ -188,7 +188,12 @@ func (m model) View() string {
 				backupText = "🔄 Running"
 			case BackupCompleted:
 				if !backupTime.IsZero() {
-					backupText = fmt.Sprintf("✓ %.1fMB", backupSizeMB)
+					// Show KB if less than 1 MB, otherwise MB
+					if backupSizeMB < 1.0 {
+						backupText = fmt.Sprintf("✓ %.0fKB", backupSizeMB*1024)
+					} else {
+						backupText = fmt.Sprintf("✓ %.1fMB", backupSizeMB)
+					}
 				} else {
 					backupText = "✓ Done"
 				}
