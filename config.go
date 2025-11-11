@@ -25,11 +25,18 @@ type ClusterConfig struct {
 
 // ForwardConfig represents a port-forward configuration
 type ForwardConfig struct {
-	Namespace  string `yaml:"namespace"`
-	Service    string `yaml:"service"`
-	Type       string `yaml:"type"` // "service" or "pod"
-	LocalPort  int    `yaml:"local_port"`
-	RemotePort int    `yaml:"remote_port"`
+	Namespace  string          `yaml:"namespace"`
+	Service    string          `yaml:"service"`
+	Type       string          `yaml:"type"` // "service" or "pod"
+	LocalPort  int             `yaml:"local_port"`
+	RemotePort int             `yaml:"remote_port"`
+	DBBackup   *DBBackupConfig `yaml:"db_backup,omitempty"`
+}
+
+// DBBackupConfig contains database backup configuration
+type DBBackupConfig struct {
+	SecretName   string            `yaml:"secret_name"`
+	FieldMapping map[string]string `yaml:"field_mapping"` // maps config field names to secret keys
 }
 
 // LoadConfig loads and validates the configuration from a YAML file

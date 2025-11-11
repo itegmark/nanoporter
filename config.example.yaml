@@ -5,6 +5,11 @@
 check_interval: 10s  # How often to check port-forward health
 reconnect_delay: 5s  # Delay before attempting reconnect after failure
 
+# Database Backup Feature:
+# Porter can automatically backup PostgreSQL databases accessible via port forwards.
+# To enable backups for a database, add a 'db_backup' section to the forward configuration.
+# Then run: ./porter backup
+
 # Kubernetes clusters configuration
 clusters:
   # Example production cluster
@@ -20,12 +25,22 @@ clusters:
         local_port: 8080
         remote_port: 80
       
-      # Port-forward to a specific pod
+      # Port-forward to a database with backup configuration
       - namespace: databases
         service: postgres-primary-0
         type: pod
         local_port: 5432
         remote_port: 5432
+        # Optional: Database backup configuration
+        db_backup:
+          # Name of the Kubernetes secret containing database credentials
+          secret_name: postgres-primary-credentials
+          # Map credential fields to secret keys (host is always localhost via port-forward)
+          field_mapping:
+            database: database_name    # Maps to secret's 'database_name' field
+            username: db_user          # Maps to secret's 'db_user' field
+            password: db_password      # Maps to secret's 'db_password' field
+            connection_string: conn_string  # Optional: full connection string
       
       # Another service example
       - namespace: cache
@@ -51,6 +66,30 @@ clusters:
         type: service
         local_port: 4000
         remote_port: 8080
+      
+      # Database with simpler field mapping (when secret keys match defaults)
+      - namespace: databases
+        service: app-db-pooler
+        type: service
+        local_port: 5433
+        remote_port: 5432
+        db_backup:
+          secret_name: app-db-credentials
+          field_mapping:
+            database: database
+            username: username
+            password: password
+      
+      # Database using only connection string (auto-parsed)
+      - namespace: databases
+        service: legacy-db-pooler
+        type: service
+        local_port: 5434
+        remote_port: 5432
+        db_backup:
+          secret_name: legacy-db-secret
+          field_mapping:
+            connection_string: database_url  # Will be parsed to extract user, pass, db
 
   # Example development cluster (local minikube/kind)
   - name: local

@@ -30,6 +30,17 @@ const (
 	StateStopped      ForwardState = "stopped"
 )
 
+// BackupState represents the state of a database backup
+type BackupState string
+
+const (
+	BackupNone      BackupState = ""
+	BackupPending   BackupState = "pending"
+	BackupRunning   BackupState = "running"
+	BackupCompleted BackupState = "completed"
+	BackupFailed    BackupState = "failed"
+)
+
 // PortForward manages a single port-forward connection
 type PortForward struct {
 	Config      ForwardConfig
@@ -39,6 +50,12 @@ type PortForward struct {
 	LastCheck   time.Time
 	ReconnectAt time.Time
 	RetryCount  int
+
+	// Backup status
+	BackupState  BackupState
+	BackupError  string
+	BackupTime   time.Time
+	BackupSizeMB float64
 
 	mu         sync.RWMutex
 	client     *kubernetes.Clientset
@@ -383,6 +400,30 @@ func (pf *PortForward) setError(err string) {
 	pf.mu.Lock()
 	defer pf.mu.Unlock()
 	pf.Error = err
+}
+
+// setBackupState updates the backup state
+func (pf *PortForward) setBackupState(state BackupState) {
+	pf.mu.Lock()
+	defer pf.mu.Unlock()
+	pf.BackupState = state
+}
+
+// setBackupError updates the backup error message
+func (pf *PortForward) setBackupError(err string) {
+	pf.mu.Lock()
+	defer pf.mu.Unlock()
+	pf.BackupError = err
+}
+
+// setBackupCompleted marks backup as completed with metadata
+func (pf *PortForward) setBackupCompleted(sizeMB float64) {
+	pf.mu.Lock()
+	defer pf.mu.Unlock()
+	pf.BackupState = BackupCompleted
+	pf.BackupTime = time.Now()
+	pf.BackupSizeMB = sizeMB
+	pf.BackupError = ""
 }
 
 // GetState returns the current state (thread-safe)

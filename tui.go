@@ -109,8 +109,8 @@ func (m model) View() string {
 	b.WriteString("\n\n")
 
 	// Table header - wider columns to accommodate full names
-	header := fmt.Sprintf("%-25s %-20s %-40s %-15s %-15s %s",
-		"Cluster", "Namespace", "Service", "Ports", "Status", "Info")
+	header := fmt.Sprintf("%-20s %-18s %-35s %-12s %-14s %-16s %s",
+		"Cluster", "Namespace", "Service", "Ports", "Status", "Backup", "Info")
 	b.WriteString(headerStyle.Render(header))
 	b.WriteString("\n")
 	b.WriteString(strings.Repeat("─", 150))
@@ -132,6 +132,11 @@ func (m model) View() string {
 		retryCount := pf.RetryCount
 		reconnectAt := pf.ReconnectAt
 		lastCheck := pf.LastCheck
+		backupState := pf.BackupState
+		backupError := pf.BackupError
+		backupTime := pf.BackupTime
+		backupSizeMB := pf.BackupSizeMB
+		hasBackup := pf.Config.DBBackup != nil
 		pf.mu.RUnlock()
 
 		// Format status with color
@@ -171,8 +176,35 @@ func (m model) View() string {
 			statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 		}
 
-		row := fmt.Sprintf("%-25s %-20s %-40s %-15s %-15s %s",
-			cluster, namespace, service, ports, statusText, info)
+		// Format backup status
+		var backupText string
+		if !hasBackup {
+			backupText = "-"
+		} else {
+			switch backupState {
+			case BackupPending:
+				backupText = "⏳ Pending"
+			case BackupRunning:
+				backupText = "🔄 Running"
+			case BackupCompleted:
+				if !backupTime.IsZero() {
+					backupText = fmt.Sprintf("✓ %.1fMB", backupSizeMB)
+				} else {
+					backupText = "✓ Done"
+				}
+			case BackupFailed:
+				backupText = "✗ Failed"
+				if backupError != "" && info == "" {
+					info = truncate(backupError, 40)
+				}
+			default:
+				backupText = "⏸ Waiting"
+			}
+		}
+
+		row := fmt.Sprintf("%-20s %-18s %-35s %-12s %-14s %-16s %s",
+			truncate(cluster, 20), truncate(namespace, 18), truncate(service, 35),
+			ports, statusText, backupText, info)
 
 		b.WriteString(statusStyle.Render(row))
 		b.WriteString("\n")

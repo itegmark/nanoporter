@@ -16,6 +16,12 @@ const (
 )
 
 func main() {
+	// Check if backup command is requested
+	if len(os.Args) > 1 && os.Args[1] == "backup" {
+		runBackupCommand()
+		return
+	}
+
 	// Parse command-line flags
 	configPath := flag.String("config", defaultConfigPath, "Path to configuration file")
 	verbose := flag.Bool("verbose", false, "Enable verbose logging")
@@ -109,6 +115,37 @@ func main() {
 	// Start port-forwards and monitoring
 	slog.Info("Starting port-forwards")
 	manager.Start()
+
+	// Start database backups in background
+	go func() {
+		// Count databases to backup
+		dbCount := 0
+		for _, cluster := range config.Clusters {
+			for _, forward := range cluster.Forwards {
+				if forward.DBBackup != nil {
+					dbCount++
+				}
+			}
+		}
+
+		if dbCount > 0 {
+			slog.Info("Initializing database backups", "count", dbCount)
+
+			// Create backup manager
+			backupManager, err := NewBackupManager(config, "backups")
+			if err != nil {
+				slog.Error("Failed to initialize backup manager", "error", err)
+				return
+			}
+
+			// Run backups
+			if err := backupManager.BackupAllDatabases(manager); err != nil {
+				slog.Warn("Backup process completed with errors", "error", err)
+			} else {
+				slog.Info("All database backups completed successfully")
+			}
+		}
+	}()
 
 	// Setup signal handler for graceful shutdown
 	sigChan := make(chan os.Signal, 1)
