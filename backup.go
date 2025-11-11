@@ -239,7 +239,107 @@ func (m *BackupManager) BackupDatabase(dbName string, port int, creds *DBCredent
 		}
 	}
 
+	// Clean up old backups (keep 2 .sql and 5 .sql.gz)
+	if err := m.cleanupOldBackups(dbBackupDir); err != nil {
+		slog.Warn("Failed to cleanup old backups", "error", err)
+	}
+
 	return sizeMB, nil
+}
+
+// cleanupOldBackups removes old backup files, keeping only the latest ones
+func (m *BackupManager) cleanupOldBackups(dbBackupDir string) error {
+	// Read all files in the backup directory
+	entries, err := os.ReadDir(dbBackupDir)
+	if err != nil {
+		return fmt.Errorf("failed to read backup directory: %w", err)
+	}
+
+	// Separate SQL and GZ files
+	var sqlFiles []os.DirEntry
+	var gzFiles []os.DirEntry
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if strings.HasSuffix(name, ".sql.gz") {
+			gzFiles = append(gzFiles, entry)
+		} else if strings.HasSuffix(name, ".sql") {
+			sqlFiles = append(sqlFiles, entry)
+		}
+	}
+
+	// Sort files by modification time (newest first)
+	sortByModTime := func(files []os.DirEntry, dir string) error {
+		type fileWithTime struct {
+			entry   os.DirEntry
+			modTime time.Time
+		}
+
+		var filesWithTime []fileWithTime
+		for _, f := range files {
+			info, err := f.Info()
+			if err != nil {
+				continue
+			}
+			filesWithTime = append(filesWithTime, fileWithTime{
+				entry:   f,
+				modTime: info.ModTime(),
+			})
+		}
+
+		// Sort by modification time (newest first)
+		for i := 0; i < len(filesWithTime); i++ {
+			for j := i + 1; j < len(filesWithTime); j++ {
+				if filesWithTime[i].modTime.Before(filesWithTime[j].modTime) {
+					filesWithTime[i], filesWithTime[j] = filesWithTime[j], filesWithTime[i]
+				}
+			}
+		}
+
+		// Update original slice
+		for i, f := range filesWithTime {
+			if i < len(files) {
+				files[i] = f.entry
+			}
+		}
+
+		return nil
+	}
+
+	// Sort SQL files and keep only 2 latest
+	if err := sortByModTime(sqlFiles, dbBackupDir); err != nil {
+		return err
+	}
+	if len(sqlFiles) > 2 {
+		for _, f := range sqlFiles[2:] {
+			filePath := filepath.Join(dbBackupDir, f.Name())
+			if err := os.Remove(filePath); err != nil {
+				slog.Warn("Failed to remove old SQL backup", "file", filePath, "error", err)
+			} else {
+				slog.Info("Removed old SQL backup", "file", filePath)
+			}
+		}
+	}
+
+	// Sort GZ files and keep only 5 latest
+	if err := sortByModTime(gzFiles, dbBackupDir); err != nil {
+		return err
+	}
+	if len(gzFiles) > 5 {
+		for _, f := range gzFiles[5:] {
+			filePath := filepath.Join(dbBackupDir, f.Name())
+			if err := os.Remove(filePath); err != nil {
+				slog.Warn("Failed to remove old GZ backup", "file", filePath, "error", err)
+			} else {
+				slog.Info("Removed old GZ backup", "file", filePath)
+			}
+		}
+	}
+
+	return nil
 }
 
 // BackupAllDatabases backs up all configured databases

@@ -3,12 +3,14 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"k8s.io/klog/v2"
 )
 
 const (
@@ -16,11 +18,23 @@ const (
 )
 
 func main() {
+	// Suppress Kubernetes client-go klog output immediately
+	klog.SetOutput(io.Discard)
+
 	// Check if backup command is requested
 	if len(os.Args) > 1 && os.Args[1] == "backup" {
 		runBackupCommand()
 		return
 	}
+
+	// Initialize klog flags but don't parse them (we use our own flags)
+	klogFlags := flag.NewFlagSet("klog", flag.ContinueOnError)
+	klog.InitFlags(klogFlags)
+
+	// Set klog flags to suppress output
+	klogFlags.Set("logtostderr", "false")
+	klogFlags.Set("alsologtostderr", "false")
+	klogFlags.Set("stderrthreshold", "FATAL")
 
 	// Parse command-line flags
 	configPath := flag.String("config", defaultConfigPath, "Path to configuration file")
